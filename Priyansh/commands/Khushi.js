@@ -4,10 +4,10 @@ const fs = require("fs");
 
 module.exports.config = {
   name: "khushi",
-  version: "7.0.0",
+  version: "8.0.0",
   hasPermssion: 0,
-  credits: "Raj + Pro Upgrade",
-  description: "AI + Song (URL + Search)",
+  credits: "Raj + Final Ultra Fix",
+  description: "AI + Song (POST Fixed)",
   commandCategory: "ai",
   usages: "[on/off/message/song/url]",
   cooldowns: 2
@@ -18,7 +18,7 @@ const chatMemory = {
   history: {}
 };
 
-// 🔍 URL CHECK FUNCTION
+// ✅ URL CHECK
 function isYouTubeUrl(text) {
   return /(youtube\.com|youtu\.be)/i.test(text);
 }
@@ -44,7 +44,7 @@ module.exports.run = async function ({ api, event, args }) {
 
   const userMsg = body || "";
 
-  // 🎵 SONG SYSTEM (SMART DETECT)
+  // 🎵 SONG SYSTEM
   if (
     userMsg.toLowerCase().includes("song") ||
     userMsg.toLowerCase().includes("music") ||
@@ -59,13 +59,11 @@ module.exports.run = async function ({ api, event, args }) {
       if (isYouTubeUrl(userMsg)) {
         videoUrl = userMsg.trim();
         title = "Your Song";
-      } 
-      // 🔍 IF SEARCH
-      else {
+      } else {
         const query = userMsg.replace(/khushi|song|music|play/gi, "").trim();
 
         if (!query) {
-          return api.sendMessage("Song naam to batao 😏", threadID, messageID);
+          return api.sendMessage("Song naam batao 😏", threadID, messageID);
         }
 
         const search = await yts(query);
@@ -81,10 +79,14 @@ module.exports.run = async function ({ api, event, args }) {
         console.log("🎯 Found:", title);
       }
 
-      // 🎧 DOWNLOAD LINK
-      const dl = await axios.get(
-        `https://uzairrajputapis.qzz.io/api/downloader/ytmp3?url=${encodeURIComponent(videoUrl)}`,
-        { timeout: 20000 }
+      // 🎧 DOWNLOAD (POST FIX)
+      const dl = await axios.post(
+        "https://uzairrajputapis.qzz.io/api/downloader/ytmp3",
+        { url: videoUrl },
+        {
+          headers: { "Content-Type": "application/json" },
+          timeout: 20000
+        }
       );
 
       console.log("📦 API:", dl.data);
@@ -135,31 +137,25 @@ module.exports.run = async function ({ api, event, args }) {
   chatMemory.history[senderID] = chatMemory.history[senderID] || [];
   chatMemory.history[senderID].push(`User: ${userMsg}`);
 
-  if (chatMemory.history[senderID].length > 6) {
+  if (chatMemory.history[senderID].length > 6)
     chatMemory.history[senderID].shift();
-  }
 
   const fullChat = chatMemory.history[senderID].join("\n");
 
-  const prompt = `Tum ek short Hinglish chatbot ho. Sirf 1 line me reply do.\n${fullChat}`;
+  const prompt = `Short Hinglish reply only:\n${fullChat}`;
 
   try {
     const res = await axios.post(
       "https://uzairrajputapis.qzz.io/api/ai/gemini",
+      { prompt: prompt },
       {
-        prompt: prompt
-      },
-      {
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         timeout: 15000
       }
     );
 
     const botReply =
-      res.data?.result?.answer ||
-      "Samajh nahi aaya 😅";
+      res.data?.result?.answer || "Samajh nahi aaya 😅";
 
     chatMemory.history[senderID].push(`khushi: ${botReply}`);
 
@@ -167,11 +163,11 @@ module.exports.run = async function ({ api, event, args }) {
 
   } catch (err) {
     console.error("❌ AI ERROR:", err.response?.data || err.message);
-    return api.sendMessage("Jaan 😔 AI error aa gaya", threadID, messageID);
+    return api.sendMessage("AI error aa gaya 😔", threadID, messageID);
   }
 };
 
-// AUTO REPLY
+// 🔁 AUTO REPLY
 module.exports.handleEvent = async function ({ api, event }) {
   const { body, senderID, messageReply } = event;
 
