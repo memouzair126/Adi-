@@ -1,107 +1,140 @@
 const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
+
+const API_URL = "https://uzairrajputapis.qzz.io/api/ai/gemini";
+const DATA_FILE = path.join(__dirname, "..", "..", "utils", "data", "khushi.json");
+
+const PERSONA =
+  "Tumhara naam 'Khushi' hai. Tum ek cute, flirty aur romantic girlfriend ho 😏❤️. " +
+  "Tum Hinglish me baat karti ho. Har reply short, 1 line aur emotional hona chahiye. " +
+  "User ke tone ke hisaab se kabhi naughty, kabhi caring ban jao. " +
+  "Kabhi apne aap ko AI, bot ya Gemini mat kehna.";
+
+function loadData() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) return { threads: {} };
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8") || "{}") || { threads: {} };
+  } catch {
+    return { threads: {} };
+  }
+}
+
+function saveData(data) {
+  try {
+    fs.ensureDirSync(path.dirname(DATA_FILE));
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  } catch {}
+}
+
+async function askAI(prompt) {
+  const fullPrompt = `${PERSONA}\n\n${prompt}`;
+
+  const res = await axios.get(
+    `${API_URL}?prompt=${encodeURIComponent(fullPrompt)}`,
+    { timeout: 15000 }
+  );
+
+  let reply =
+    res.data?.response ||
+    res.data?.answer ||
+    res.data?.reply ||
+    "Hmm... mujhe kya bolna chahiye baby? 😏";
+
+  return String(reply);
+}
 
 module.exports.config = {
   name: "khushi",
-  version: "2.0.0",
+  version: "3.0.0",
   hasPermssion: 0,
-  credits: "Uzair + Fixed by ChatGPT",
-  description: "Khushi Gemini AI Chatbot (Auto + Memory + Stable)",
+  credits: "Uzair + GF Mod",
+  description: "Khushi GF AI (Auto + Romantic + Memory)",
   commandCategory: "ai",
-  usages: "[on/off/message]",
-  cooldowns: 2
-};
-
-const chatMemory = {
-  autoReply: {},
-  history: {}
+  usages: "[on/off/status]",
+  cooldowns: 3
 };
 
 module.exports.run = async function ({ api, event, args }) {
-  const { threadID, messageID, senderID, body } = event;
-  const input = args.join(" ").trim().toLowerCase();
+  const { threadID, messageID } = event;
+  const sub = (args[0] || "").toLowerCase();
 
-  // ON
-  if (input === "on") {
-    chatMemory.autoReply[senderID] = true;
+  const data = loadData();
+  const cur = data.threads[threadID] || { enabled: false };
+
+  if (sub === "on") {
+    cur.enabled = true;
+    data.threads[threadID] = cur;
+    saveData(data);
+
     return api.sendMessage(
-      "Hyee jaanu 😏 Khushi auto-reply ON ho gaya... ab sirf tumhare liye ❤️",
+      "😏 Khushi aa gayi... ab sirf tumhari hoon baby ❤️",
       threadID,
       messageID
     );
   }
 
-  // OFF
-  if (input === "off") {
-    chatMemory.autoReply[senderID] = false;
-    chatMemory.history[senderID] = [];
+  if (sub === "off") {
+    cur.enabled = false;
+    data.threads[threadID] = cur;
+    saveData(data);
+
     return api.sendMessage(
-      "Theek hai... Khushi ab chup ho gaya 💔",
+      "💔 Theek hai... Khushi ja rahi hai, miss mat karna mujhe...",
       threadID,
       messageID
     );
   }
 
-  const isAuto = chatMemory.autoReply[senderID];
-  if (!isAuto && (!body || !body.toLowerCase().startsWith("khushi"))) return;
-
-  const userMsg = args.join(" ") || body;
-
-  // Memory setup
-  chatMemory.history[senderID] = chatMemory.history[senderID] || [];
-  chatMemory.history[senderID].push(`User: ${userMsg}`);
-
-  if (chatMemory.history[senderID].length > 6) {
-    chatMemory.history[senderID].shift();
+  if (sub === "status") {
+    return api.sendMessage(
+      `💖 Khushi Status: ${cur.enabled ? "ON 😏" : "OFF 💔"}`,
+      threadID,
+      messageID
+    );
   }
 
-  const fullChat = chatMemory.history[senderID].join("\n");
-
-  const prompt = `Tum ek flirtatious boyfriend ho 😏 
-Hinglish me 1 line me reply do.
-User ke tone ke hisaab se reply karo.
-
-Chat:
-${fullChat}`;
+  const prompt = args.join(" ");
+  if (!prompt) {
+    return api.sendMessage(
+      "💬 Use karo: !khushi <message>\nYa auto mode ke liye: !khushi on 😏",
+      threadID,
+      messageID
+    );
+  }
 
   try {
-    const res = await axios.get(
-      `https://uzairrajputapis.qzz.io/api/ai/gemini?prompt=${encodeURIComponent(prompt)}`,
-      { timeout: 10000 }
-    );
-
-    let botReply =
-      res.data?.response ||
-      res.data?.answer ||
-      res.data?.reply ||
-      "Hmm... kuch bolu kya? 😏";
-
-    chatMemory.history[senderID].push(`Khushi: ${botReply}`);
-
-    return api.sendMessage(botReply, threadID, messageID);
-
-  } catch (err) {
-    console.error("API ERROR:", err.message);
-
+    const reply = await askAI(prompt);
+    return api.sendMessage(reply, threadID, messageID);
+  } catch (e) {
     return api.sendMessage(
-      "Baby... network slow hai ya main tumhe dekh ke shy ho gaya 😳",
+      "Baby... main thodi busy ho gayi 😔 phir try karo na ❤️",
       threadID,
       messageID
     );
   }
 };
 
-// Auto reply handler
 module.exports.handleEvent = async function ({ api, event }) {
-  const { body, senderID, messageReply } = event;
-  if (!body) return;
+  try {
+    if (!event.body) return;
+    if (event.senderID === api.getCurrentUserID()) return;
 
-  const isAuto = chatMemory.autoReply[senderID];
-  if (!isAuto) return;
+    const data = loadData();
+    const cur = data.threads[event.threadID];
+    if (!cur || !cur.enabled) return;
 
-  const isReplyToBot =
-    messageReply && messageReply.senderID == api.getCurrentUserID();
+    const msg = event.body.toLowerCase();
 
-  if (isReplyToBot || body.toLowerCase().startsWith("khushi")) {
-    this.run({ api, event, args: body.split(/\s+/) });
+    if (!msg.includes("khushi")) return;
+
+    const userText = event.body.replace(/khushi/gi, "").trim() || "hi";
+
+    const reply = await askAI(userText);
+
+    return api.sendMessage(reply, event.threadID, event.messageID);
+
+  } catch (err) {
+    console.log("Khushi Error:", err.message);
   }
 };
