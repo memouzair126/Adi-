@@ -3,10 +3,10 @@ const yts = require("yt-search");
 
 module.exports.config = {
   name: "khushi",
-  version: "4.0.0",
+  version: "5.0.0",
   hasPermssion: 0,
-  credits: "Raj + Advanced",
-  description: "AI + Song Player",
+  credits: "Raj + Ultimate Fix",
+  description: "AI + Song System",
   commandCategory: "ai",
   usages: "[on/off/message/song]",
   cooldowns: 2
@@ -36,12 +36,11 @@ module.exports.run = async function ({ api, event, args }) {
   }
 
   const isAuto = chatMemory.autoReply[senderID];
-
   if (!isAuto && !body?.toLowerCase().startsWith("khushi")) return;
 
   const userMsg = body || "";
 
-  // 🎵 SONG DETECTION
+  // 🎵 SONG SYSTEM
   if (
     userMsg.toLowerCase().includes("song") ||
     userMsg.toLowerCase().includes("music") ||
@@ -51,10 +50,10 @@ module.exports.run = async function ({ api, event, args }) {
       const query = userMsg.replace(/khushi|song|music|play/gi, "").trim();
 
       if (!query) {
-        return api.sendMessage("Song naam to batao jaan 😏", threadID, messageID);
+        return api.sendMessage("Song naam to batao 😏", threadID, messageID);
       }
 
-      // 🔍 YT SEARCH
+      // 🔍 Search YouTube
       const search = await yts(query);
       const video = search.videos[0];
 
@@ -62,15 +61,20 @@ module.exports.run = async function ({ api, event, args }) {
         return api.sendMessage("Song nahi mila 😔", threadID, messageID);
       }
 
-      // 🎧 DOWNLOAD API
+      console.log("🎯 Found:", video.title, video.url);
+
+      // 🎧 Download MP3
       const dl = await axios.get(
         `https://uzairrajputapis.qzz.io/api/downloader/ytmp3?url=${encodeURIComponent(video.url)}`
       );
 
-      const audioUrl = dl.data?.result?.download;
+      console.log("📦 API:", dl.data);
+
+      // ✅ Auto detect audio link
+      const audioUrl = Object.values(dl.data?.result || {})[0];
 
       if (!audioUrl) {
-        return api.sendMessage("Download fail ho gaya 😔", threadID, messageID);
+        return api.sendMessage("Download link nahi mila 😔", threadID, messageID);
       }
 
       return api.sendMessage(
@@ -83,12 +87,12 @@ module.exports.run = async function ({ api, event, args }) {
       );
 
     } catch (err) {
-      console.error("SONG ERROR:", err.message);
+      console.error("❌ SONG ERROR:", err.response?.data || err.message);
       return api.sendMessage("Song laane me error aa gaya 😔", threadID, messageID);
     }
   }
 
-  // 🤖 AI PART
+  // 🤖 AI CHAT
   chatMemory.history[senderID] = chatMemory.history[senderID] || [];
   chatMemory.history[senderID].push(`User: ${userMsg}`);
 
@@ -109,9 +113,12 @@ module.exports.run = async function ({ api, event, args }) {
       {
         headers: {
           "Content-Type": "application/json"
-        }
+        },
+        timeout: 15000
       }
     );
+
+    console.log("✅ AI RESPONSE:", res.data);
 
     const botReply =
       res.data?.result?.answer ||
@@ -122,7 +129,7 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage(botReply.trim(), threadID, messageID);
 
   } catch (err) {
-    console.error("AI ERROR:", err.response?.data || err.message);
+    console.error("❌ AI ERROR:", err.response?.data || err.message);
 
     return api.sendMessage(
       "Jaan 😔 AI error aa gaya",
