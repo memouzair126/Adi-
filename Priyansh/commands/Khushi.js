@@ -2,10 +2,10 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "khushi",
-  version: "2.1.0",
+  version: "3.0.0",
   hasPermssion: 0,
-  credits: "Raj + Fixed",
-  description: "khushi AI chatbot",
+  credits: "Raj + Final Fix",
+  description: "khushi Gemini AI chatbot",
   commandCategory: "ai",
   usages: "[on/off/message]",
   cooldowns: 2
@@ -21,11 +21,13 @@ module.exports.run = async function ({ api, event, args }) {
 
   const input = args.join(" ").trim().toLowerCase();
 
+  // ✅ ON
   if (input === "on") {
     chatMemory.autoReply[senderID] = true;
     return api.sendMessage("Auto reply ON 😏", threadID, messageID);
   }
 
+  // ❌ OFF
   if (input === "off") {
     chatMemory.autoReply[senderID] = false;
     chatMemory.history[senderID] = [];
@@ -33,49 +35,64 @@ module.exports.run = async function ({ api, event, args }) {
   }
 
   const isAuto = chatMemory.autoReply[senderID];
+
   if (!isAuto && !body?.toLowerCase().startsWith("khushi")) return;
 
   const userMsg = body || "";
 
+  // 🧠 Memory
   chatMemory.history[senderID] = chatMemory.history[senderID] || [];
   chatMemory.history[senderID].push(`User: ${userMsg}`);
 
-  if (chatMemory.history[senderID].length > 6)
+  if (chatMemory.history[senderID].length > 6) {
     chatMemory.history[senderID].shift();
+  }
 
   const fullChat = chatMemory.history[senderID].join("\n");
 
-  const prompt = `Short Hinglish reply only:\n${fullChat}`;
+  // 💬 Prompt
+  const prompt = `Tum ek short Hinglish chatbot ho. Sirf 1 line me reply do.\n${fullChat}`;
 
   try {
-    // ✅ GET REQUEST (WORKING FORMAT)
-    const url = `https://uzairrajputapis.qzz.io/api/ai/gemini?message=${encodeURIComponent(prompt)}`;
+    // 🚀 POST REQUEST (FIXED)
+    const res = await axios.post(
+      "https://uzairrajputapis.qzz.io/api/ai/gemini",
+      {
+        message: prompt
+      },
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        timeout: 15000
+      }
+    );
 
-    console.log("🔗 URL:", url);
+    console.log("✅ API RESPONSE:", res.data);
 
-    const res = await axios.get(url, { timeout: 15000 });
-
-    console.log("✅ API DATA:", res.data);
-
+    // ✅ SAFE PARSE
     const botReply =
       res.data?.result?.answer ||
       res.data?.answer ||
       "Samajh nahi aaya 😅";
 
-    return api.sendMessage(botReply, threadID, messageID);
+    // 🧠 Save reply
+    chatMemory.history[senderID].push(`khushi: ${botReply}`);
+
+    return api.sendMessage(botReply.trim(), threadID, messageID);
 
   } catch (err) {
-    console.error("❌ ERROR:", err.response?.data || err.message);
+    console.error("❌ FULL ERROR:", err.response?.data || err.message);
 
     return api.sendMessage(
-      "API hit fail ho gaya 😔 check console",
+      "Jaan 😔 API error aa gaya, baad me try karo",
       threadID,
       messageID
     );
   }
 };
 
-// AUTO REPLY
+// 🔁 AUTO REPLY SYSTEM
 module.exports.handleEvent = async function ({ api, event }) {
   const { body, senderID, messageReply } = event;
 
