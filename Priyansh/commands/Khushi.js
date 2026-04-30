@@ -57,9 +57,9 @@ module.exports.run = async function ({ api, event, args }) {
     // 🚀 POST REQUEST (FIXED)
     const res = await axios.post(
       "https://uzairrajputapis.qzz.io/api/ai/gemini",
-      {
-        message: prompt
-      },
+       {
+    prompt: prompt   // ✅ yahi fix hai
+  },
       {
         headers: {
           "Content-Type": "application/json"
