@@ -1,123 +1,77 @@
 const axios = require("axios");
 
-const API_URL = "https://uzairrajputapis.qzz.io/api/ai/gemini";
-
-// GF Personality 😏
-const PERSONA = `
-Tumhara naam Khushi hai.
-Tum ek romantic, flirty aur caring girlfriend ho ❤️
-Hinglish me baat karo.
-Har reply MAX 2 lines me ho.
-Reply natural, emotional aur engaging ho.
-Kabhi apne aap ko AI ya bot mat kehna.
-`;
-
-async function askAI(text) {
-  const prompt = `${PERSONA}\nUser: ${text}\nKhushi:`;
-
-  const res = await axios.get(
-    `${API_URL}?prompt=${encodeURIComponent(prompt)}`,
-    { timeout: 15000 }
-  );
-
-  let reply =
-    res.data?.response ||
-    res.data?.answer ||
-    res.data?.reply ||
-    "Hmm... tum kuch kehna chahte ho na baby? 😏";
-
-  return reply;
-}
-
 module.exports.config = {
   name: "khushi",
-  version: "4.0.0",
+  version: "2.0.0",
   hasPermssion: 0,
-  credits: "Uzair + GF Clean",
-  description: "Romantic GF AI (Auto + Reply + Trigger)",
+  credits: "Uzair + Final Fix",
+  description: "Romantic GF Auto Chat (Language Adaptive)",
   commandCategory: "ai",
-  usages: "khushi <message>",
+  usages: "khushi <msg>",
   cooldowns: 2
 };
 
-// 🔥 AUTO + TRIGGER SYSTEM
+const API = "https://uzairrajputapis.qzz.io/api/ai/gemini";
+
+// 🔥 Smart GF Personality
+const STYLE = `
+Tumhara naam Khushi hai ❤️
+Tum ek romantic girlfriend ho 😏
+User jis language me baat kare, tum usi language me reply karo (Roman Hindi, Hindi, English, Hinglish)
+Reply max 2 lines me do
+Tone cute, flirty aur natural ho
+Kabhi mat bolo ke tum AI ho
+`;
+
+async function getReply(msg) {
+  try {
+    const res = await axios.get(
+      `${API}?prompt=${encodeURIComponent(STYLE + "\nUser: " + msg)}`
+    );
+
+    return (
+      res.data?.response ||
+      res.data?.answer ||
+      res.data?.reply ||
+      "Hmmm... kuch to bolna chahte ho na baby? 😏"
+    );
+  } catch (e) {
+    return "Baby network thoda slow hai... phir try karo na ❤️";
+  }
+}
+
+// 🚀 AUTO CHAT SYSTEM
 module.exports.handleEvent = async function ({ api, event }) {
   try {
     if (!event.body) return;
-    if (event.senderID === api.getCurrentUserID()) return;
+    if (event.senderID == api.getCurrentUserID()) return;
 
-    const msg = event.body.trim();
+    const msg = event.body;
     const lower = msg.toLowerCase();
 
-    const isReplyToBot =
+    const isReply =
       event.type === "message_reply" &&
       event.messageReply &&
-      event.messageReply.senderID === api.getCurrentUserID();
+      event.messageReply.senderID == api.getCurrentUserID();
 
-    const hasTrigger = lower.includes("khushi");
+    const isTrigger = lower.includes("khushi");
 
-    if (!hasTrigger && !isReplyToBot) return;
+    // ❗ trigger ya reply pe hi chale
+    if (!isTrigger && !isReply) return;
 
-    let userText = msg;
+    let text = msg;
 
-    // remove trigger word
-    if (hasTrigger) {
-      userText = msg.replace(/khushi/gi, "").trim();
+    if (isTrigger) {
+      text = msg.replace(/khushi/gi, "").trim();
     }
 
-    if (!userText) userText = "hi";
+    if (!text) text = "hi";
 
-    const reply = await askAI(userText);
+    const reply = await getReply(text);
 
-    const info = await api.sendMessage(
-      reply,
-      event.threadID,
-      event.messageID
-    );
-
-    // continue reply chain
-    if (info && info.messageID) {
-      global.client.handleReply.push({
-        name: module.exports.config.name,
-        messageID: info.messageID,
-        author: event.senderID
-      });
-    }
+    api.sendMessage(reply, event.threadID, event.messageID);
 
   } catch (err) {
     console.log("Khushi Error:", err.message);
-  }
-};
-
-// 💬 CONTINUE CONVERSATION
-module.exports.handleReply = async function ({ api, event, handleReply }) {
-  try {
-    const { senderID, body, threadID, messageID } = event;
-
-    if (senderID !== handleReply.author) return;
-    if (!body) return;
-
-    const reply = await askAI(body);
-
-    const info = await api.sendMessage(
-      reply,
-      threadID,
-      messageID
-    );
-
-    if (info && info.messageID) {
-      global.client.handleReply.push({
-        name: module.exports.config.name,
-        messageID: info.messageID,
-        author: senderID
-      });
-    }
-
-  } catch (err) {
-    api.sendMessage(
-      "Baby... thoda confuse ho gayi 😔 phir bolo na ❤️",
-      event.threadID,
-      event.messageID
-    );
   }
 };
