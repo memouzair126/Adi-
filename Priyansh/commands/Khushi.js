@@ -4,12 +4,12 @@ const fs = require("fs");
 
 module.exports.config = {
   name: "khushi",
-  version: "6.0.0",
+  version: "7.0.0",
   hasPermssion: 0,
-  credits: "Raj + Ultimate Stable",
-  description: "AI + Song Working System",
+  credits: "Raj + Pro Upgrade",
+  description: "AI + Song (URL + Search)",
   commandCategory: "ai",
-  usages: "[on/off/message/song]",
+  usages: "[on/off/message/song/url]",
   cooldowns: 2
 };
 
@@ -18,18 +18,21 @@ const chatMemory = {
   history: {}
 };
 
+// 🔍 URL CHECK FUNCTION
+function isYouTubeUrl(text) {
+  return /(youtube\.com|youtu\.be)/i.test(text);
+}
+
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID, body } = event;
 
   const input = args.join(" ").trim().toLowerCase();
 
-  // ON
   if (input === "on") {
     chatMemory.autoReply[senderID] = true;
     return api.sendMessage("Auto reply ON 😏", threadID, messageID);
   }
 
-  // OFF
   if (input === "off") {
     chatMemory.autoReply[senderID] = false;
     chatMemory.history[senderID] = [];
@@ -41,32 +44,46 @@ module.exports.run = async function ({ api, event, args }) {
 
   const userMsg = body || "";
 
-  // 🎵 SONG SYSTEM
+  // 🎵 SONG SYSTEM (SMART DETECT)
   if (
     userMsg.toLowerCase().includes("song") ||
     userMsg.toLowerCase().includes("music") ||
-    userMsg.toLowerCase().includes("play")
+    userMsg.toLowerCase().includes("play") ||
+    isYouTubeUrl(userMsg)
   ) {
     try {
-      const query = userMsg.replace(/khushi|song|music|play/gi, "").trim();
+      let videoUrl = "";
+      let title = "";
 
-      if (!query) {
-        return api.sendMessage("Song naam to batao 😏", threadID, messageID);
+      // 🎯 IF URL
+      if (isYouTubeUrl(userMsg)) {
+        videoUrl = userMsg.trim();
+        title = "Your Song";
+      } 
+      // 🔍 IF SEARCH
+      else {
+        const query = userMsg.replace(/khushi|song|music|play/gi, "").trim();
+
+        if (!query) {
+          return api.sendMessage("Song naam to batao 😏", threadID, messageID);
+        }
+
+        const search = await yts(query);
+        const video = search.videos[0];
+
+        if (!video) {
+          return api.sendMessage("Song nahi mila 😔", threadID, messageID);
+        }
+
+        videoUrl = video.url;
+        title = video.title;
+
+        console.log("🎯 Found:", title);
       }
-
-      // 🔍 SEARCH
-      const search = await yts(query);
-      const video = search.videos[0];
-
-      if (!video) {
-        return api.sendMessage("Song nahi mila 😔", threadID, messageID);
-      }
-
-      console.log("🎯 Found:", video.title);
 
       // 🎧 DOWNLOAD LINK
       const dl = await axios.get(
-        `https://uzairrajputapis.qzz.io/api/downloader/ytmp3?url=${encodeURIComponent(video.url)}`,
+        `https://uzairrajputapis.qzz.io/api/downloader/ytmp3?url=${encodeURIComponent(videoUrl)}`,
         { timeout: 20000 }
       );
 
@@ -97,10 +114,10 @@ module.exports.run = async function ({ api, event, args }) {
         writer.on("error", reject);
       });
 
-      // 📤 SEND SONG
+      // 📤 SEND
       return api.sendMessage(
         {
-          body: `🎵 ${video.title}`,
+          body: `🎵 ${title}`,
           attachment: fs.createReadStream(filePath)
         },
         threadID,
