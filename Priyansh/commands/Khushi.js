@@ -4,10 +4,10 @@ const fs = require("fs");
 
 module.exports.config = {
   name: "khushi",
-  version: "8.0.0",
+  version: "9.0.0",
   hasPermssion: 0,
-  credits: "Raj + Final Ultra Fix",
-  description: "AI + Song (POST Fixed)",
+  credits: "Raj + Stable Fix",
+  description: "AI + Song Working Perfect",
   commandCategory: "ai",
   usages: "[on/off/message/song/url]",
   cooldowns: 2
@@ -18,7 +18,7 @@ const chatMemory = {
   history: {}
 };
 
-// ✅ URL CHECK
+// 🔍 YouTube URL check
 function isYouTubeUrl(text) {
   return /(youtube\.com|youtu\.be)/i.test(text);
 }
@@ -28,6 +28,7 @@ module.exports.run = async function ({ api, event, args }) {
 
   const input = args.join(" ").trim().toLowerCase();
 
+  // ON/OFF
   if (input === "on") {
     chatMemory.autoReply[senderID] = true;
     return api.sendMessage("Auto reply ON 😏", threadID, messageID);
@@ -55,7 +56,7 @@ module.exports.run = async function ({ api, event, args }) {
       let videoUrl = "";
       let title = "";
 
-      // 🎯 IF URL
+      // URL
       if (isYouTubeUrl(userMsg)) {
         videoUrl = userMsg.trim();
         title = "Your Song";
@@ -75,11 +76,11 @@ module.exports.run = async function ({ api, event, args }) {
 
         videoUrl = video.url;
         title = video.title;
-
-        console.log("🎯 Found:", title);
       }
 
-      // 🎧 DOWNLOAD (POST FIX)
+      console.log("🎯 Video:", videoUrl);
+
+      // 🎧 API CALL (POST)
       const dl = await axios.post(
         "https://uzairrajputapis.qzz.io/api/downloader/ytmp3",
         { url: videoUrl },
@@ -91,7 +92,8 @@ module.exports.run = async function ({ api, event, args }) {
 
       console.log("📦 API:", dl.data);
 
-      const audioUrl = Object.values(dl.data?.result || {})[0];
+      // ✅ FIXED PARSE
+      const audioUrl = dl.data?.result?.download_url;
 
       if (!audioUrl) {
         return api.sendMessage("Download link nahi mila 😔", threadID, messageID);
@@ -99,13 +101,16 @@ module.exports.run = async function ({ api, event, args }) {
 
       console.log("🔗 AUDIO:", audioUrl);
 
-      // 📥 DOWNLOAD FILE
+      // 📥 DOWNLOAD FILE (SAFE STREAM)
       const filePath = __dirname + `/cache_${senderID}.mp3`;
 
       const response = await axios({
         url: audioUrl,
         method: "GET",
-        responseType: "stream"
+        responseType: "stream",
+        headers: {
+          "User-Agent": "Mozilla/5.0"
+        }
       });
 
       const writer = fs.createWriteStream(filePath);
