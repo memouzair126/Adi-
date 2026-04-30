@@ -2,45 +2,53 @@ const axios = require("axios");
 
 module.exports.config = {
   name: "khushi",
-  version: "2.0.0",
+  version: "final-working",
   hasPermssion: 0,
   credits: "Uzair + Final Fix",
-  description: "Romantic GF Auto Chat (Language Adaptive)",
+  description: "GF AI Working (API result.answer fix)",
   commandCategory: "ai",
-  usages: "khushi <msg>",
   cooldowns: 2
 };
 
 const API = "https://uzairrajputapis.qzz.io/api/ai/gemini";
 
-// 🔥 Smart GF Personality
+// GF personality 😏
 const STYLE = `
 Tumhara naam Khushi hai ❤️
 Tum ek romantic girlfriend ho 😏
-User jis language me baat kare, tum usi language me reply karo (Roman Hindi, Hindi, English, Hinglish)
+User jis language me baat kare usi me reply karo
 Reply max 2 lines me do
-Tone cute, flirty aur natural ho
+Cute, flirty aur natural tone rakho
 Kabhi mat bolo ke tum AI ho
 `;
 
 async function getReply(msg) {
   try {
-    const res = await axios.get(
-      `${API}?prompt=${encodeURIComponent(STYLE + "\nUser: " + msg)}`
-    );
+    const res = await axios.post(API, {
+      prompt: STYLE + "\nUser: " + msg
+    });
 
-    return (
-      res.data?.response ||
-      res.data?.answer ||
-      res.data?.reply ||
-      "Hmmm... kuch to bolna chahte ho na baby? 😏"
-    );
+    // ✅ tumhari API ka correct field
+    let reply = res.data?.result?.answer;
+
+    if (!reply) {
+      reply =
+        res.data?.response ||
+        res.data?.answer ||
+        "Hmm... kuch kehna chahte ho na baby? 😏";
+    }
+
+    // 🔥 limit 2 lines (extra control)
+    reply = reply.split("\n").slice(0, 2).join("\n");
+
+    return reply;
+
   } catch (e) {
-    return "Baby network thoda slow hai... phir try karo na ❤️";
+    console.log("API ERROR:", e.message);
+    return "Baby network slow hai... phir try karo ❤️";
   }
 }
 
-// 🚀 AUTO CHAT SYSTEM
 module.exports.handleEvent = async function ({ api, event }) {
   try {
     if (!event.body) return;
@@ -56,7 +64,6 @@ module.exports.handleEvent = async function ({ api, event }) {
 
     const isTrigger = lower.includes("khushi");
 
-    // ❗ trigger ya reply pe hi chale
     if (!isTrigger && !isReply) return;
 
     let text = msg;
@@ -67,11 +74,17 @@ module.exports.handleEvent = async function ({ api, event }) {
 
     if (!text) text = "hi";
 
+    // ⏳ loading reaction
+    api.setMessageReaction("⏳", event.messageID, event.threadID);
+
     const reply = await getReply(text);
 
     api.sendMessage(reply, event.threadID, event.messageID);
 
+    // ❤️ success reaction
+    api.setMessageReaction("❤️", event.messageID, event.threadID);
+
   } catch (err) {
-    console.log("Khushi Error:", err.message);
+    console.log("ERROR:", err.message);
   }
 };
