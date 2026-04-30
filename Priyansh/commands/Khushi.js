@@ -1,12 +1,13 @@
 const axios = require("axios");
 const yts = require("yt-search");
+const fs = require("fs");
 
 module.exports.config = {
   name: "khushi",
-  version: "5.0.0",
+  version: "6.0.0",
   hasPermssion: 0,
-  credits: "Raj + Ultimate Fix",
-  description: "AI + Song System",
+  credits: "Raj + Ultimate Stable",
+  description: "AI + Song Working System",
   commandCategory: "ai",
   usages: "[on/off/message/song]",
   cooldowns: 2
@@ -22,13 +23,13 @@ module.exports.run = async function ({ api, event, args }) {
 
   const input = args.join(" ").trim().toLowerCase();
 
-  // ✅ ON
+  // ON
   if (input === "on") {
     chatMemory.autoReply[senderID] = true;
     return api.sendMessage("Auto reply ON 😏", threadID, messageID);
   }
 
-  // ❌ OFF
+  // OFF
   if (input === "off") {
     chatMemory.autoReply[senderID] = false;
     chatMemory.history[senderID] = [];
@@ -53,7 +54,7 @@ module.exports.run = async function ({ api, event, args }) {
         return api.sendMessage("Song naam to batao 😏", threadID, messageID);
       }
 
-      // 🔍 Search YouTube
+      // 🔍 SEARCH
       const search = await yts(query);
       const video = search.videos[0];
 
@@ -61,29 +62,50 @@ module.exports.run = async function ({ api, event, args }) {
         return api.sendMessage("Song nahi mila 😔", threadID, messageID);
       }
 
-      console.log("🎯 Found:", video.title, video.url);
+      console.log("🎯 Found:", video.title);
 
-      // 🎧 Download MP3
+      // 🎧 DOWNLOAD LINK
       const dl = await axios.get(
-        `https://uzairrajputapis.qzz.io/api/downloader/ytmp3?url=${encodeURIComponent(video.url)}`
+        `https://uzairrajputapis.qzz.io/api/downloader/ytmp3?url=${encodeURIComponent(video.url)}`,
+        { timeout: 20000 }
       );
 
       console.log("📦 API:", dl.data);
 
-      // ✅ Auto detect audio link
       const audioUrl = Object.values(dl.data?.result || {})[0];
 
       if (!audioUrl) {
         return api.sendMessage("Download link nahi mila 😔", threadID, messageID);
       }
 
+      console.log("🔗 AUDIO:", audioUrl);
+
+      // 📥 DOWNLOAD FILE
+      const filePath = __dirname + `/cache_${senderID}.mp3`;
+
+      const response = await axios({
+        url: audioUrl,
+        method: "GET",
+        responseType: "stream"
+      });
+
+      const writer = fs.createWriteStream(filePath);
+      response.data.pipe(writer);
+
+      await new Promise((resolve, reject) => {
+        writer.on("finish", resolve);
+        writer.on("error", reject);
+      });
+
+      // 📤 SEND SONG
       return api.sendMessage(
         {
           body: `🎵 ${video.title}`,
-          attachment: await global.utils.getStreamFromURL(audioUrl)
+          attachment: fs.createReadStream(filePath)
         },
         threadID,
-        messageID
+        messageID,
+        () => fs.unlinkSync(filePath)
       );
 
     } catch (err) {
@@ -118,8 +140,6 @@ module.exports.run = async function ({ api, event, args }) {
       }
     );
 
-    console.log("✅ AI RESPONSE:", res.data);
-
     const botReply =
       res.data?.result?.answer ||
       "Samajh nahi aaya 😅";
@@ -130,16 +150,11 @@ module.exports.run = async function ({ api, event, args }) {
 
   } catch (err) {
     console.error("❌ AI ERROR:", err.response?.data || err.message);
-
-    return api.sendMessage(
-      "Jaan 😔 AI error aa gaya",
-      threadID,
-      messageID
-    );
+    return api.sendMessage("Jaan 😔 AI error aa gaya", threadID, messageID);
   }
 };
 
-// 🔁 AUTO REPLY
+// AUTO REPLY
 module.exports.handleEvent = async function ({ api, event }) {
   const { body, senderID, messageReply } = event;
 
