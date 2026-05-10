@@ -4,7 +4,7 @@ const fs = require("fs");
 
 module.exports.config = {
   name: "khushi",
-  version: "12.0.0",
+  version: "13.0.0",
   hasPermssion: 0,
   credits: "Uzair Rajput",
   description: "Khushi AI + Song + Video",
@@ -27,7 +27,7 @@ function isYouTubeUrl(text) {
   return /(youtube\.com|youtu\.be)/i.test(text);
 }
 
-// SEARCH FUNCTION
+// SEARCH
 async function searchYouTube(query) {
 
   // SEARCH API
@@ -42,8 +42,6 @@ async function searchYouTube(query) {
         timeout: 20000
       }
     );
-
-    console.log("📦 SEARCH API RESPONSE:", data);
 
     const result =
       data.result ||
@@ -208,23 +206,14 @@ async function fetchVideo(query) {
 
   } else {
 
-    // SONG NAME SEARCH
     const found = await searchYouTube(query);
 
-    if (!found) {
-
-      console.log("❌ VIDEO SEARCH FAIL");
-
-      return null;
-    }
+    if (!found) return null;
 
     videoUrl = found.url;
     title = found.title;
-
-    console.log("✅ VIDEO URL:", videoUrl);
   }
 
-  // API ONLY URL
   const { data } = await axios.post(
     VIDEO_API,
     { url: videoUrl },
@@ -235,8 +224,6 @@ async function fetchVideo(query) {
       timeout: 30000
     }
   );
-
-  console.log("📦 VIDEO API RESPONSE:", data);
 
   if (!data || data.success === false) {
     return null;
@@ -251,12 +238,7 @@ async function fetchVideo(query) {
     result.download_url ||
     result.url;
 
-  if (!video) {
-
-    console.log("❌ VIDEO URL NOT FOUND");
-
-    return null;
-  }
+  if (!video) return null;
 
   return {
     video,
@@ -284,7 +266,7 @@ module.exports.run = async function ({
       ""
     ).trim() || userMsg;
 
-  // SONG / VIDEO
+  // SONG / VIDEO MODE
   if (
     cleanedMsg.toLowerCase().includes("song") ||
     cleanedMsg.toLowerCase().includes("music") ||
@@ -331,8 +313,6 @@ module.exports.run = async function ({
           videoInfo =
             await fetchVideo(query);
 
-          console.log("📦 VIDEO API OK");
-
         } catch (e) {
 
           console.log(
@@ -359,7 +339,8 @@ module.exports.run = async function ({
           __dirname +
           `/cache_${senderID}_${Date.now()}.mp4`;
 
-        const response = await axios({
+        // DOWNLOAD VIDEO
+        let response = await axios({
           url: video,
           method: "GET",
           responseType: "stream",
@@ -369,7 +350,7 @@ module.exports.run = async function ({
           timeout: 60000
         });
 
-        const writer =
+        let writer =
           fs.createWriteStream(filePath);
 
         response.data.pipe(writer);
@@ -379,24 +360,69 @@ module.exports.run = async function ({
           writer.on("error", reject);
         });
 
-        const stats =
-          fs.statSync(filePath);
+        let stats = fs.statSync(filePath);
 
-        const sizeMB =
+        let sizeMB =
           stats.size / (1024 * 1024);
 
-        // 21MB LIMIT
+        // BIG VIDEO
         if (sizeMB > 21) {
 
-          fs.unlinkSync(filePath);
-
-          return api.sendMessage(
-            `🥺 Jaanu ye video ${sizeMB.toFixed(2)}MB hai\n21MB se zyada video send nahi kar sakti`,
-            threadID,
-            messageID
+          console.log(
+            `⚠️ BIG VIDEO ${sizeMB.toFixed(2)}MB`
           );
+
+          try {
+            fs.unlinkSync(filePath);
+          } catch (_) {}
+
+          // TRY LOW QUALITY
+          const lowQualityUrl =
+            video
+              .replace("720", "360")
+              .replace("hq", "sd");
+
+          response = await axios({
+            url: lowQualityUrl,
+            method: "GET",
+            responseType: "stream",
+            headers: {
+              "User-Agent": "Mozilla/5.0"
+            },
+            timeout: 60000
+          });
+
+          writer =
+            fs.createWriteStream(filePath);
+
+          response.data.pipe(writer);
+
+          await new Promise((resolve, reject) => {
+            writer.on("finish", resolve);
+            writer.on("error", reject);
+          });
+
+          stats = fs.statSync(filePath);
+
+          sizeMB =
+            stats.size / (1024 * 1024);
+
+          // STILL BIG
+          if (sizeMB > 21) {
+
+            try {
+              fs.unlinkSync(filePath);
+            } catch (_) {}
+
+            return api.sendMessage(
+              "🥺 Jaanu har quality me video 21MB se badi aa rahi hai",
+              threadID,
+              messageID
+            );
+          }
         }
 
+        // SEND VIDEO
         return api.sendMessage(
           {
             body:
@@ -422,10 +448,6 @@ module.exports.run = async function ({
         songInfo =
           await fetchSongAPI1(query);
 
-        if (songInfo) {
-          console.log("📦 SONG API 1 OK");
-        }
-
       } catch (e) {
 
         console.log(
@@ -441,10 +463,6 @@ module.exports.run = async function ({
 
           songInfo =
             await fetchSongAPI2(query);
-
-          if (songInfo) {
-            console.log("📦 SONG API 2 OK");
-          }
 
         } catch (e) {
 
