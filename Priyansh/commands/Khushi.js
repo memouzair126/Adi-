@@ -4,7 +4,7 @@ const fs = require("fs");
 
 module.exports.config = {
   name: "khushi",
-  version: "11.0.0",
+  version: "12.0.0",
   hasPermssion: 0,
   credits: "Uzair Rajput",
   description: "Khushi AI + Song + Video",
@@ -20,15 +20,76 @@ const chatMemory = {
 const SONG_API_1 = "https://uzairrajputapis.qzz.io/api/downloader/ytmp3";
 const SONG_API_2 = "https://uzair-new-music-api.onrender.com/download/dlmp3";
 const VIDEO_API  = "https://uzairrajputapis.qzz.io/api/downloader/youtube";
+const SEARCH_API = "https://uzairrajputapis.qzz.io/api/search/lyrics";
 const AI_API     = "https://uzairrajputapis.qzz.io/api/ai/gemini";
 
 function isYouTubeUrl(text) {
   return /(youtube\.com|youtu\.be)/i.test(text);
 }
 
-// ONLY yt-search
+// SEARCH FUNCTION
 async function searchYouTube(query) {
 
+  // SEARCH API
+  try {
+
+    const { data } = await axios.get(
+      `${SEARCH_API}?q=${encodeURIComponent(query)}`,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0"
+        },
+        timeout: 20000
+      }
+    );
+
+    console.log("📦 SEARCH API RESPONSE:", data);
+
+    const result =
+      data.result ||
+      data.data ||
+      data.results;
+
+    let item = null;
+
+    if (Array.isArray(result)) {
+      item = result[0];
+    } else if (typeof result === "object") {
+      item = result;
+    }
+
+    if (item) {
+
+      const url =
+        item.url ||
+        item.link ||
+        item.videoUrl;
+
+      const title =
+        item.title ||
+        item.name ||
+        "YouTube Media";
+
+      if (url) {
+
+        console.log("✅ SEARCH API SUCCESS");
+
+        return {
+          url,
+          title
+        };
+      }
+    }
+
+  } catch (e) {
+
+    console.log(
+      "❌ SEARCH API FAIL:",
+      e.message
+    );
+  }
+
+  // yt-search fallback
   try {
 
     const search = await yts(query);
@@ -37,7 +98,7 @@ async function searchYouTube(query) {
 
     if (!video) return null;
 
-    console.log("✅ yt-search success");
+    console.log("✅ yt-search SUCCESS");
 
     return {
       url: video.url,
@@ -46,7 +107,10 @@ async function searchYouTube(query) {
 
   } catch (e) {
 
-    console.log("❌ yt-search fail:", e.message);
+    console.log(
+      "❌ yt-search FAIL:",
+      e.message
+    );
 
     return null;
   }
@@ -79,7 +143,7 @@ async function fetchSongAPI1(query) {
       headers: {
         "Content-Type": "application/json"
       },
-      timeout: 20000
+      timeout: 25000
     }
   );
 
@@ -94,7 +158,7 @@ async function fetchSongAPI1(query) {
   };
 }
 
-// SONG API 2 FALLBACK
+// SONG API 2
 async function fetchSongAPI2(query) {
 
   const apiUrl = isYouTubeUrl(query)
@@ -137,20 +201,30 @@ async function fetchVideo(query) {
   let videoUrl = "";
   let title = "YouTube Video";
 
+  // DIRECT URL
   if (isYouTubeUrl(query)) {
 
     videoUrl = query.trim();
 
   } else {
 
+    // SONG NAME SEARCH
     const found = await searchYouTube(query);
 
-    if (!found) return null;
+    if (!found) {
+
+      console.log("❌ VIDEO SEARCH FAIL");
+
+      return null;
+    }
 
     videoUrl = found.url;
     title = found.title;
+
+    console.log("✅ VIDEO URL:", videoUrl);
   }
 
+  // API ONLY URL
   const { data } = await axios.post(
     VIDEO_API,
     { url: videoUrl },
@@ -158,9 +232,11 @@ async function fetchVideo(query) {
       headers: {
         "Content-Type": "application/json"
       },
-      timeout: 25000
+      timeout: 30000
     }
   );
+
+  console.log("📦 VIDEO API RESPONSE:", data);
 
   if (!data || data.success === false) {
     return null;
@@ -169,12 +245,18 @@ async function fetchVideo(query) {
   const result = data.result || data;
 
   const video =
+    result.downloadUrl ||
     result.video ||
     result.videoUrl ||
     result.download_url ||
     result.url;
 
-  if (!video) return null;
+  if (!video) {
+
+    console.log("❌ VIDEO URL NOT FOUND");
+
+    return null;
+  }
 
   return {
     video,
@@ -202,7 +284,7 @@ module.exports.run = async function ({
       ""
     ).trim() || userMsg;
 
-  // SONG / VIDEO MODE
+  // SONG / VIDEO
   if (
     cleanedMsg.toLowerCase().includes("song") ||
     cleanedMsg.toLowerCase().includes("music") ||
@@ -226,6 +308,7 @@ module.exports.run = async function ({
           .trim();
 
         if (!query) {
+
           return api.sendMessage(
             "Jaanu song ya video ka naam batao 😘",
             threadID,
@@ -236,7 +319,7 @@ module.exports.run = async function ({
 
       console.log("🎯 QUERY:", query);
 
-      // VIDEO
+      // VIDEO MODE
       if (
         cleanedMsg.toLowerCase().includes("video")
       ) {
@@ -245,14 +328,15 @@ module.exports.run = async function ({
 
         try {
 
-          videoInfo = await fetchVideo(query);
+          videoInfo =
+            await fetchVideo(query);
 
           console.log("📦 VIDEO API OK");
 
         } catch (e) {
 
           console.log(
-            "❌ VIDEO API fail:",
+            "❌ VIDEO ERROR:",
             e.message
           );
         }
@@ -307,7 +391,7 @@ module.exports.run = async function ({
           fs.unlinkSync(filePath);
 
           return api.sendMessage(
-            "Jaanu ye video 21MB se zyada hai 🥺",
+            `🥺 Jaanu ye video ${sizeMB.toFixed(2)}MB hai\n21MB se zyada video send nahi kar sakti`,
             threadID,
             messageID
           );
@@ -316,7 +400,7 @@ module.exports.run = async function ({
         return api.sendMessage(
           {
             body:
-              `🎬 Ye lo jaanu tumhari video 💕\n» ${title}`,
+              `🎬 Ye lo jaanu 💕\n» ${title}`,
             attachment:
               fs.createReadStream(filePath)
           },
@@ -330,7 +414,7 @@ module.exports.run = async function ({
         );
       }
 
-      // SONG
+      // SONG MODE
       let songInfo = null;
 
       try {
@@ -345,7 +429,7 @@ module.exports.run = async function ({
       } catch (e) {
 
         console.log(
-          "❌ SONG API 1 fail:",
+          "❌ SONG API 1 FAIL:",
           e.message
         );
       }
@@ -365,7 +449,7 @@ module.exports.run = async function ({
         } catch (e) {
 
           console.log(
-            "❌ SONG API 2 fail:",
+            "❌ SONG API 2 FAIL:",
             e.message
           );
         }
@@ -461,12 +545,12 @@ module.exports.run = async function ({
 `Tumhara naam "Khushi" hai.
 Tumhe owner "Adi" ne banaya hai.
 
-Tum ek romantic aur cute girlfriend ho.
-Hamesha Hinglish me short reply do 😘💕
+Tum ek cute romantic girlfriend ho 😘💕
+Hamesha Hinglish me short reply do.
 
 RULES:
 - Max 2 line
-- Cute emojis use karo
+- Cute emojis
 - Bot ya AI mat bolo
 - Vulgar nahi
 
