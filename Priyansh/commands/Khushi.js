@@ -7,9 +7,9 @@ module.exports.config = {
   version: "10.0.0",
   hasPermssion: 0,
   credits: "Uzair Rajput",
-  description: "Khushi — romantic gf style AI + auto song (dual API)",
+  description: "Khushi — romantic gf style AI + auto song/video",
   commandCategory: "ai",
-  usages: "khushi <message | song name | YouTube URL>",
+  usages: "khushi <message | song | video | YouTube URL>",
   cooldowns: 2
 };
 
@@ -19,7 +19,7 @@ const chatMemory = {
 
 const SONG_API_1    = "https://uzairrajputapis.qzz.io/api/downloader/ytmp3";
 const SONG_API_2    = "https://uzair-new-music-api.onrender.com/download/dlmp3";
-const SONG_API_3    = "https://uzairrajputapis.qzz.io/api/downloader/youtube"; // NEW VIDEO API
+const SONG_API_3    = "https://uzairrajputapis.qzz.io/api/downloader/youtube";
 const YT_SEARCH_API = "https://uzairrajputapis.qzz.io/api/search/youtube";
 const AI_API        = "https://uzairrajputapis.qzz.io/api/ai/gemini";
 
@@ -36,33 +36,55 @@ async function searchYouTube(query) {
     });
 
     const candidates = [];
-    const pushItem = (it) => { if (it && typeof it === "object") candidates.push(it); };
+
+    const pushItem = (it) => {
+      if (it && typeof it === "object") candidates.push(it);
+    };
+
     if (Array.isArray(data?.result)) data.result.forEach(pushItem);
     else if (Array.isArray(data?.result?.items)) data.result.items.forEach(pushItem);
     else if (Array.isArray(data?.result?.videos)) data.result.videos.forEach(pushItem);
     else if (data?.result && typeof data.result === "object") pushItem(data.result);
+
     if (Array.isArray(data?.results)) data.results.forEach(pushItem);
-    if (Array.isArray(data?.data))    data.data.forEach(pushItem);
-    if (Array.isArray(data?.items))   data.items.forEach(pushItem);
-    if (Array.isArray(data?.videos))  data.videos.forEach(pushItem);
+    if (Array.isArray(data?.data)) data.data.forEach(pushItem);
+    if (Array.isArray(data?.items)) data.items.forEach(pushItem);
+    if (Array.isArray(data?.videos)) data.videos.forEach(pushItem);
 
     for (const it of candidates) {
-      const id    = it.videoId || it.id || it.video_id;
-      const url   = it.url || it.link || it.videoUrl || (id ? `https://youtu.be/${id}` : null);
+      const id = it.videoId || it.id || it.video_id;
+
+      const url =
+        it.url ||
+        it.link ||
+        it.videoUrl ||
+        (id ? `https://youtu.be/${id}` : null);
+
       const title = it.title || it.name || it.videoTitle;
+
       if (url && /(youtube\.com|youtu\.be)/i.test(url)) {
-        return { url, title: title || "Your Song" };
+        return {
+          url,
+          title: title || "YouTube Media"
+        };
       }
     }
-    console.log("⚠️ YT search API: koi valid item nahi mila");
+
   } catch (e) {
-    console.log("⚠️ YT search API fail:", e.response?.status || e.message);
+    console.log("⚠️ YT search API fail:", e.message);
   }
 
   try {
     const search = await yts(query);
     const video = search.videos?.[0];
-    if (video) return { url: video.url, title: video.title };
+
+    if (video) {
+      return {
+        url: video.url,
+        title: video.title
+      };
+    }
+
   } catch (e) {
     console.log("⚠️ yt-search fallback fail:", e.message);
   }
@@ -78,7 +100,9 @@ async function fetchSongAPI1(query) {
     videoUrl = query.trim();
   } else {
     const found = await searchYouTube(query);
+
     if (!found) return null;
+
     videoUrl = found.url;
     title = found.title;
   }
@@ -86,12 +110,20 @@ async function fetchSongAPI1(query) {
   const dl = await axios.post(
     SONG_API_1,
     { url: videoUrl },
-    { headers: { "Content-Type": "application/json" }, timeout: 20000 }
+    {
+      headers: { "Content-Type": "application/json" },
+      timeout: 20000
+    }
   );
 
   const audioUrl = dl.data?.result?.download_url;
+
   if (!audioUrl) return null;
-  return { audioUrl, title };
+
+  return {
+    audioUrl,
+    title
+  };
 }
 
 async function fetchSongAPI2(query) {
@@ -105,28 +137,46 @@ async function fetchSongAPI2(query) {
   });
 
   if (!data || data.success === false) return null;
-  const audioUrl = data.downloadUrl || data.url || data.link || data.audio;
+
+  const audioUrl =
+    data.downloadUrl ||
+    data.url ||
+    data.link ||
+    data.audio;
+
   if (!audioUrl) return null;
-  const title = data.title || data.searchResult?.title || "Your Song";
-  return { audioUrl, title };
+
+  const title =
+    data.title ||
+    data.searchResult?.title ||
+    "Your Song";
+
+  return {
+    audioUrl,
+    title
+  };
 }
 
-// NEW VIDEO API FUNCTION
 async function fetchVideoAPI(query) {
   let videoUrl = "";
+  let title = "YouTube Video";
 
   if (isYouTubeUrl(query)) {
     videoUrl = query.trim();
   } else {
     const found = await searchYouTube(query);
+
     if (!found) return null;
+
     videoUrl = found.url;
+    title = found.title;
   }
 
-  const { data } = await axios.get(
-    `${SONG_API_3}?url=${encodeURIComponent(videoUrl)}`,
+  const { data } = await axios.post(
+    SONG_API_3,
+    { url: videoUrl },
     {
-      headers: { "User-Agent": "Mozilla/5.0" },
+      headers: { "Content-Type": "application/json" },
       timeout: 25000
     }
   );
@@ -141,38 +191,52 @@ async function fetchVideoAPI(query) {
     result.download_url ||
     result.url;
 
-  const title = result.title || "YouTube Video";
+  if (!video) return null;
 
-  return { video, title };
+  return {
+    video,
+    title: result.title || title
+  };
 }
 
-module.exports.run = async function ({ api, event, args }) {
+module.exports.run = async function ({ api, event }) {
+
   const { threadID, messageID, senderID, body } = event;
 
   const userMsg = body || "";
 
-  const cleanedMsg = userMsg.replace(/^khushi[\s,!.?:-]*/i, "").trim() || userMsg;
+  const cleanedMsg =
+    userMsg.replace(/^khushi[\s,!.?:-]*/i, "").trim() || userMsg;
 
   if (
     cleanedMsg.toLowerCase().includes("song") ||
     cleanedMsg.toLowerCase().includes("music") ||
     cleanedMsg.toLowerCase().includes("play") ||
-    cleanedMsg.toLowerCase().includes("video") || // NEW
+    cleanedMsg.toLowerCase().includes("video") ||
     isYouTubeUrl(cleanedMsg)
   ) {
+
     try {
 
       let query;
+
       if (isYouTubeUrl(cleanedMsg)) {
         query = cleanedMsg.trim();
       } else {
-        query = cleanedMsg.replace(/song|music|play|video/gi, "").trim();
+        query = cleanedMsg
+          .replace(/song|music|play|video/gi, "")
+          .trim();
+
         if (!query) {
-          return api.sendMessage("Jaanu song ya video ka naam to batao 😘🎶", threadID, messageID);
+          return api.sendMessage(
+            "Jaanu song ya video ka naam to batao 😘🎶",
+            threadID,
+            messageID
+          );
         }
       }
 
-      console.log("🎯 Khushi query:", query);
+      console.log("🎯 QUERY:", query);
 
       // VIDEO MODE
       if (cleanedMsg.toLowerCase().includes("video")) {
@@ -181,17 +245,23 @@ module.exports.run = async function ({ api, event, args }) {
 
         try {
           videoInfo = await fetchVideoAPI(query);
+          console.log("📦 VIDEO API OK");
         } catch (e) {
           console.log("⚠️ VIDEO API fail:", e.message);
         }
 
         if (!videoInfo) {
-          return api.sendMessage("Sorry jaanu, video nahi mila 🥺💔", threadID, messageID);
+          return api.sendMessage(
+            "Sorry jaanu, video nahi mila 🥺💔",
+            threadID,
+            messageID
+          );
         }
 
         const { video, title } = videoInfo;
 
-        const filePath = __dirname + `/cache_${senderID}_${Date.now()}.mp4`;
+        const filePath =
+          __dirname + `/cache_${senderID}_${Date.now()}.mp4`;
 
         const response = await axios({
           url: video,
@@ -202,6 +272,7 @@ module.exports.run = async function ({ api, event, args }) {
         });
 
         const writer = fs.createWriteStream(filePath);
+
         response.data.pipe(writer);
 
         await new Promise((resolve, reject) => {
@@ -212,9 +283,9 @@ module.exports.run = async function ({ api, event, args }) {
         const stats = fs.statSync(filePath);
         const sizeMB = stats.size / (1024 * 1024);
 
-        // ONLY SEND BELOW 21MB
         if (sizeMB > 21) {
           fs.unlinkSync(filePath);
+
           return api.sendMessage(
             "Jaanu ye video 21MB se zyada hai 🥺",
             threadID,
@@ -228,16 +299,25 @@ module.exports.run = async function ({ api, event, args }) {
             attachment: fs.createReadStream(filePath)
           },
           threadID,
-          () => { try { fs.unlinkSync(filePath); } catch (_) {} },
+          () => {
+            try {
+              fs.unlinkSync(filePath);
+            } catch (_) {}
+          },
           messageID
         );
       }
 
+      // SONG MODE
       let songInfo = null;
 
       try {
         songInfo = await fetchSongAPI1(query);
-        if (songInfo) console.log("📦 API-1 (ytmp3) OK");
+
+        if (songInfo) {
+          console.log("📦 API-1 OK");
+        }
+
       } catch (e) {
         console.log("⚠️ API-1 fail:", e.message);
       }
@@ -245,21 +325,28 @@ module.exports.run = async function ({ api, event, args }) {
       if (!songInfo) {
         try {
           songInfo = await fetchSongAPI2(query);
-          if (songInfo) console.log("📦 Fallback API-2 (dlmp3) OK");
+
+          if (songInfo) {
+            console.log("📦 API-2 OK");
+          }
+
         } catch (e) {
           console.log("⚠️ API-2 fail:", e.message);
         }
       }
 
       if (!songInfo) {
-        return api.sendMessage("Sorry baby, ye song nahi mila 🥺💔", threadID, messageID);
+        return api.sendMessage(
+          "Sorry baby, ye song nahi mila 🥺💔",
+          threadID,
+          messageID
+        );
       }
 
       const { audioUrl, title } = songInfo;
 
-      console.log("🔗 AUDIO:", audioUrl);
-
-      const filePath = __dirname + `/cache_${senderID}_${Date.now()}.mp3`;
+      const filePath =
+        __dirname + `/cache_${senderID}_${Date.now()}.mp3`;
 
       const response = await axios({
         url: audioUrl,
@@ -270,6 +357,7 @@ module.exports.run = async function ({ api, event, args }) {
       });
 
       const writer = fs.createWriteStream(filePath);
+
       response.data.pipe(writer);
 
       await new Promise((resolve, reject) => {
@@ -283,59 +371,106 @@ module.exports.run = async function ({ api, event, args }) {
           attachment: fs.createReadStream(filePath)
         },
         threadID,
-        () => { try { fs.unlinkSync(filePath); } catch (_) {} },
+        () => {
+          try {
+            fs.unlinkSync(filePath);
+          } catch (_) {}
+        },
         messageID
       );
 
     } catch (err) {
-      console.error("❌ SONG/VIDEO ERROR:", err.response?.data || err.message);
-      return api.sendMessage("Media laate hue chhoti si problem aa gayi 🥺", threadID, messageID);
+
+      console.error(
+        "❌ SONG/VIDEO ERROR:",
+        err.response?.data || err.message
+      );
+
+      return api.sendMessage(
+        "Media laate hue problem aa gayi 🥺",
+        threadID,
+        messageID
+      );
     }
   }
 
-  chatMemory.history[threadID] = chatMemory.history[threadID] || [];
-  chatMemory.history[threadID].push(`User: ${cleanedMsg}`);
-  if (chatMemory.history[threadID].length > 8) chatMemory.history[threadID].shift();
+  // AI CHAT
+  chatMemory.history[threadID] =
+    chatMemory.history[threadID] || [];
 
-  const fullChat = chatMemory.history[threadID].join("\n");
+  chatMemory.history[threadID].push(
+    `User: ${cleanedMsg}`
+  );
+
+  if (chatMemory.history[threadID].length > 8) {
+    chatMemory.history[threadID].shift();
+  }
+
+  const fullChat =
+    chatMemory.history[threadID].join("\n");
 
   const prompt =
 `Tumhara naam "Khushi" hai. Tumhe owner "Adi" ne banaya hai.
 Tum ek pyaari, romantic, thodi flirty Hindi/Urdu bolne wali girlfriend ho.
-User se Hinglish (Roman Urdu/Hindi) me romantic + thoda teasing/hot gf andaaz me reply karo.
-Cute emojis use karo (😘😍🥺💕🔥🙈). Hamesha apne character me raho — bot ya AI bilkul mat bolo.
+User se Hinglish me romantic + teasing style me baat karo.
+Cute emojis use karo 😘😍🥺💕🔥🙈
 
 STRICT RULES:
-- Reply MAX 2 line ka ho (2 line se zyada bilkul nahi).
-- Jawab chhota ho, lekin pura ho — adha-adhura ya cut nahi.
-- Vulgar ya explicit kuch nahi, sirf flirty/romantic gf vibe.
-- Agar koi pooche "tumhe kisne banaya / owner kaun hai" — bolna: "Mujhe mere Adi ne banaya hai 💕".
+- Reply MAX 2 line.
+- Chhota par pura jawab.
+- Vulgar nahi.
+- Agar owner pooche to bolo:
+"Mujhe mere Adi ne banaya hai 💕"
 
 Conversation:
 ${fullChat}
 
-Khushi ka reply (Hinglish, max 2 line, chhota par pura, romantic + flirty gf style):`;
+Khushi ka reply:`;
 
   try {
+
     const res = await axios.post(
       AI_API,
       { prompt },
-      { headers: { "Content-Type": "application/json" }, timeout: 15000 }
+      {
+        headers: { "Content-Type": "application/json" },
+        timeout: 15000
+      }
     );
 
-    const botReply = (res.data?.result?.answer || "Samjhi nahi jaanu, dobara bolo na 🥺").trim();
+    const botReply =
+      (
+        res.data?.result?.answer ||
+        "Samjhi nahi jaanu 🥺"
+      ).trim();
 
-    chatMemory.history[threadID].push(`Khushi: ${botReply}`);
+    chatMemory.history[threadID].push(
+      `Khushi: ${botReply}`
+    );
 
-    return api.sendMessage(botReply, threadID, messageID);
+    return api.sendMessage(
+      botReply,
+      threadID,
+      messageID
+    );
 
   } catch (err) {
-    console.error("❌ AI ERROR:", err.response?.data || err.message);
-    return api.sendMessage("Kuch toh gadbad hai jaanu, abhi reply nahi de pa rahi 🥺", threadID, messageID);
+
+    console.error(
+      "❌ AI ERROR:",
+      err.response?.data || err.message
+    );
+
+    return api.sendMessage(
+      "Kuch toh gadbad hai jaanu 🥺",
+      threadID,
+      messageID
+    );
   }
 };
 
 module.exports.handleEvent = async function ({ api, event }) {
+
   const { body, senderID, messageReply } = event;
 
   if (!body) return;
@@ -343,9 +478,13 @@ module.exports.handleEvent = async function ({ api, event }) {
   if (senderID == api.getCurrentUserID()) return;
 
   const isReplyToBot =
-    messageReply && messageReply.senderID == api.getCurrentUserID();
+    messageReply &&
+    messageReply.senderID == api.getCurrentUserID();
 
-  if (isReplyToBot || body.toLowerCase().startsWith("khushi")) {
-    this.run({ api, event, args: [body] });
+  if (
+    isReplyToBot ||
+    body.toLowerCase().startsWith("khushi")
+  ) {
+    this.run({ api, event });
   }
 };
