@@ -1,13 +1,14 @@
 const axios = require("axios");
 const yts = require("yt-search");
 const fs = require("fs");
+const { execSync } = require("child_process");
 
 module.exports.config = {
   name: "khushi",
-  version: "13.0.0",
+  version: "15.0.0",
   hasPermssion: 0,
   credits: "Uzair Rajput",
-  description: "Khushi AI + Song + Video",
+  description: "Khushi AI + Fast Song + Fast Video",
   commandCategory: "ai",
   usages: "khushi <message | song | video>",
   cooldowns: 2
@@ -39,7 +40,7 @@ async function searchYouTube(query) {
         headers: {
           "User-Agent": "Mozilla/5.0"
         },
-        timeout: 20000
+        timeout: 15000
       }
     );
 
@@ -141,7 +142,7 @@ async function fetchSongAPI1(query) {
       headers: {
         "Content-Type": "application/json"
       },
-      timeout: 25000
+      timeout: 20000
     }
   );
 
@@ -167,7 +168,7 @@ async function fetchSongAPI2(query) {
     headers: {
       "User-Agent": "Mozilla/5.0"
     },
-    timeout: 25000
+    timeout: 20000
   });
 
   if (!data || data.success === false) {
@@ -193,7 +194,7 @@ async function fetchSongAPI2(query) {
   };
 }
 
-// VIDEO API
+// FAST VIDEO
 async function fetchVideo(query) {
 
   let videoUrl = "";
@@ -214,14 +215,18 @@ async function fetchVideo(query) {
     title = found.title;
   }
 
+  // FAST 360P VIDEO
   const { data } = await axios.post(
     VIDEO_API,
-    { url: videoUrl },
+    {
+      url: videoUrl,
+      quality: "360p"
+    },
     {
       headers: {
         "Content-Type": "application/json"
       },
-      timeout: 30000
+      timeout: 20000
     }
   );
 
@@ -340,7 +345,7 @@ module.exports.run = async function ({
           `/cache_${senderID}_${Date.now()}.mp4`;
 
         // DOWNLOAD VIDEO
-        let response = await axios({
+        const response = await axios({
           url: video,
           method: "GET",
           responseType: "stream",
@@ -350,7 +355,7 @@ module.exports.run = async function ({
           timeout: 60000
         });
 
-        let writer =
+        const writer =
           fs.createWriteStream(filePath);
 
         response.data.pipe(writer);
@@ -360,62 +365,76 @@ module.exports.run = async function ({
           writer.on("error", reject);
         });
 
-        let stats = fs.statSync(filePath);
+        let finalPath = filePath;
 
-        let sizeMB =
+        // SIZE CHECK
+        const stats =
+          fs.statSync(filePath);
+
+        const sizeMB =
           stats.size / (1024 * 1024);
 
-        // BIG VIDEO
+        console.log(
+          `📦 VIDEO SIZE: ${sizeMB.toFixed(2)}MB`
+        );
+
+        // COMPRESS IF BIG
         if (sizeMB > 21) {
 
           console.log(
-            `⚠️ BIG VIDEO ${sizeMB.toFixed(2)}MB`
+            `⚠️ Compressing ${sizeMB.toFixed(2)}MB`
           );
 
+          const compressedPath =
+            __dirname +
+            `/compressed_${senderID}_${Date.now()}.mp4`;
+
           try {
-            fs.unlinkSync(filePath);
-          } catch (_) {}
 
-          // TRY LOW QUALITY
-          const lowQualityUrl =
-            video
-              .replace("720", "360")
-              .replace("hq", "sd");
-
-          response = await axios({
-            url: lowQualityUrl,
-            method: "GET",
-            responseType: "stream",
-            headers: {
-              "User-Agent": "Mozilla/5.0"
-            },
-            timeout: 60000
-          });
-
-          writer =
-            fs.createWriteStream(filePath);
-
-          response.data.pipe(writer);
-
-          await new Promise((resolve, reject) => {
-            writer.on("finish", resolve);
-            writer.on("error", reject);
-          });
-
-          stats = fs.statSync(filePath);
-
-          sizeMB =
-            stats.size / (1024 * 1024);
-
-          // STILL BIG
-          if (sizeMB > 21) {
+            execSync(
+              `ffmpeg -i "${filePath}" -vcodec libx264 -crf 35 -preset ultrafast -acodec aac -b:a 64k "${compressedPath}" -y`,
+              { stdio: "ignore" }
+            );
 
             try {
               fs.unlinkSync(filePath);
             } catch (_) {}
 
+            const newStats =
+              fs.statSync(compressedPath);
+
+            const newSizeMB =
+              newStats.size / (1024 * 1024);
+
+            console.log(
+              `✅ COMPRESSED: ${newSizeMB.toFixed(2)}MB`
+            );
+
+            // TOO BIG AGAIN
+            if (newSizeMB > 21) {
+
+              try {
+                fs.unlinkSync(compressedPath);
+              } catch (_) {}
+
+              return api.sendMessage(
+                "🥺 Video bohat badi hai, send nahi ho paayi",
+                threadID,
+                messageID
+              );
+            }
+
+            finalPath = compressedPath;
+
+          } catch (err) {
+
+            console.log(
+              "❌ Compression fail:",
+              err.message
+            );
+
             return api.sendMessage(
-              "🥺 Jaanu har quality me video 21MB se badi aa rahi hai",
+              "🥺 Video compress nahi ho paayi",
               threadID,
               messageID
             );
@@ -428,12 +447,12 @@ module.exports.run = async function ({
             body:
               `🎬 Ye lo jaanu 💕\n» ${title}`,
             attachment:
-              fs.createReadStream(filePath)
+              fs.createReadStream(finalPath)
           },
           threadID,
           () => {
             try {
-              fs.unlinkSync(filePath);
+              fs.unlinkSync(finalPath);
             } catch (_) {}
           },
           messageID
@@ -564,12 +583,12 @@ module.exports.run = async function ({
 Tumhe owner "Adi" ne banaya hai.
 
 Tum ek cute romantic girlfriend ho 😘💕
-Hamesha Hinglish me short reply do.
+Hamesha Hinglish me short romantic reply do.
 
 RULES:
 - Max 2 line
 - Cute emojis
-- Bot ya AI mat bolo
+- AI ya bot mat bolo
 - Vulgar nahi
 
 Conversation:
